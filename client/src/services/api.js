@@ -21,8 +21,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    const msg = err.response?.data?.message || 'An unexpected error occurred. Please try again.';
-    // Convert to a standard error structure
+    let msg = err.response?.data?.message || 'An unexpected error occurred. Please try again.';
+    // If there are detailed validation errors, append the first one to the message
+    if (err.response?.data?.errors && err.response.data.errors.length > 0) {
+      msg = `${err.response.data.errors[0].message}`;
+    }
     return Promise.reject(new Error(msg));
   }
 );

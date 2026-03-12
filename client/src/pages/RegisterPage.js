@@ -52,10 +52,10 @@ const RegisterPage = () => {
     e.preventDefault();
     if (!formData.name || !formData.email) return toast.error('Name and Email are required.');
     
-    const cueRegex = /^[a-zA-Z0-9]{1,6}$/;
+    const cueRegex = /^[a-zA-Z0-9!@#$%^&*_+=\-?.,]{1,6}$/;
     for (const cue of cues) {
       if (!cueRegex.test(cue)) {
-        return toast.error('Each cue must be 1-6 alphanumeric characters.');
+        return toast.error('Each cue must be 1-6 alphanumeric or special characters.');
       }
     }
 
@@ -160,7 +160,6 @@ const RegisterPage = () => {
                           type="text"
                           required
                           className="input-field pl-10"
-                          placeholder="John Doe"
                           value={formData.name}
                           onChange={e => setFormData({ ...formData, name: e.target.value })}
                         />
@@ -174,7 +173,6 @@ const RegisterPage = () => {
                           type="email"
                           required
                           className="input-field pl-10"
-                          placeholder="john@example.com"
                           value={formData.email}
                           onChange={e => setFormData({ ...formData, email: e.target.value })}
                         />
@@ -187,9 +185,6 @@ const RegisterPage = () => {
                       <label className="block text-sm font-medium text-gray-700">
                         Memory Cues ({cues.length}/5)
                       </label>
-                      <span className="text-xs text-secondary-600 bg-secondary/10 px-2 py-1 rounded-md">
-                        Alphanumeric, 1-6 chars
-                      </span>
                     </div>
                     
                     <div className="space-y-3">
@@ -199,7 +194,6 @@ const RegisterPage = () => {
                             type="text"
                             required
                             className="input-field"
-                            placeholder={`e.g. pet${idx+1} or num${idx+1}`}
                             value={cue}
                             onChange={(e) => handleCueChange(idx, e.target.value)}
                             maxLength={6}

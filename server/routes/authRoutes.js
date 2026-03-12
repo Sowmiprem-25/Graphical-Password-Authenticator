@@ -25,8 +25,8 @@ router.post(
       .withMessage('You must provide between 3 and 5 memory cues.'),
     body('cues.*')
       .trim()
-      .matches(/^[a-zA-Z0-9]{1,6}$/)
-      .withMessage('Each memory cue must be 1–6 alphanumeric characters.'),
+      .matches(/^[a-zA-Z0-9!@#$%^&*_+=\-?.,]{1,6}$/)
+      .withMessage('Each memory cue must be 1–6 alphanumeric or special characters.'),
     body('imageSequence')
       .isArray({ min: 3, max: 5 })
       .withMessage('Image sequence must match the number of cues.'),

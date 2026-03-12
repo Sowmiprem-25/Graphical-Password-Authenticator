@@ -97,7 +97,7 @@ const register = async (req, res, next) => {
     }
 
     // Validate each cue: 1-6 chars, alphanumeric only
-    const cueRegex = /^[a-zA-Z0-9]{1,6}$/;
+    const cueRegex = /^[a-zA-Z0-9!@#$%^&*_+=\-?.,]{1,6}$/;
     for (let i = 0; i < cues.length; i++) {
       if (!cueRegex.test(cues[i])) {
         return res.status(400).json({
