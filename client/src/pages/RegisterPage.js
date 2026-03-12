@@ -16,6 +16,7 @@ const RegisterPage = () => {
   // Step 1 State
   const [formData, setFormData] = useState({ name: '', email: '' });
   const [cues, setCues] = useState(['', '', '']); // Start with 3 cues
+  const [imageCategory, setImageCategory] = useState('mixed');
   
   // Step 2 State
   const [imageOptions, setImageOptions] = useState({}); // { cueIndex: [images] }
@@ -65,7 +66,7 @@ const RegisterPage = () => {
       let cumulativeOptions = [];
 
       for (let i = 0; i < cues.length; i++) {
-        const res = await api.get(`/auth/image-options?alreadySelected=${cumulativeOptions.join(',')}`);
+        const res = await api.get(`/auth/image-options?alreadySelected=${cumulativeOptions.join(',')}&category=${imageCategory}`);
         newImageOptions[i] = res.data.options;
         const optionIds = res.data.options.map(o => o.id);
         cumulativeOptions = [...cumulativeOptions, ...optionIds];
@@ -96,7 +97,8 @@ const RegisterPage = () => {
         name: formData.name,
         email: formData.email,
         cues,
-        imageSequence: sequence
+        imageSequence: sequence,
+        imageCategory
       });
       
       toast.success(res.data.message);
@@ -222,6 +224,31 @@ const RegisterPage = () => {
                     )}
                   </div>
 
+                  <div className="mt-8">
+                    <label className="block text-sm font-medium text-gray-700 mb-4">Preferred Image Category</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { id: 'mixed', label: 'Mixed', icon: '🎲' },
+                        { id: 'animals', label: 'Animals', icon: '🦁' },
+                        { id: 'food', label: 'Food', icon: '🍕' },
+                        { id: 'vehicles', label: 'Vehicles', icon: '🚗' },
+                        { id: 'nature', label: 'Nature', icon: '🌲' },
+                        { id: 'technology', label: 'Tech', icon: '💻' },
+                        { id: 'objects', label: 'Objects', icon: '💎' },
+                        { id: 'tools', label: 'Tools', icon: '🔨' }
+                      ].map(cat => (
+                        <div 
+                          key={cat.id} 
+                          onClick={() => setImageCategory(cat.id)}
+                          className={`cursor-pointer rounded-xl p-3 border-2 transition-all text-center flex flex-col items-center justify-center ${imageCategory === cat.id ? 'border-primary bg-primary/5 shadow-md scale-105' : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'}`}
+                        >
+                          <div className="text-3xl mb-1">{cat.icon}</div>
+                          <div className="text-xs font-semibold text-gray-700">{cat.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <button 
                     type="submit" 
                     className="btn-primary w-full mt-8 py-4 text-lg"
@@ -265,15 +292,21 @@ const RegisterPage = () => {
 
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {imageOptions[idx] ? (
-                              imageOptions[idx].map((img) => (
+                              imageOptions[idx].map((img) => {
+                                const isSelectedHere = selectedImages[idx] === img.id;
+                                const isSelectedElsewhere = Object.entries(selectedImages).some(
+                                  ([cIdx, iId]) => cIdx !== idx.toString() && iId === img.id
+                                );
+                                
+                                return (
                                 <div
                                   key={img.id}
-                                  onClick={() => handleImageSelect(idx, img.id)}
+                                  onClick={() => !isSelectedElsewhere && handleImageSelect(idx, img.id)}
                                   className={`image-card h-28 relative overflow-hidden flex flex-col items-center justify-center ${
-                                    selectedImages[idx] === img.id ? 'ring-4 ring-secondary/30 bg-gray-50' : ''
-                                  }`}
+                                    isSelectedHere ? 'ring-4 ring-secondary/30 bg-gray-50' : ''
+                                  } ${isSelectedElsewhere ? 'opacity-30 grayscale cursor-not-allowed' : 'cursor-pointer hover:shadow-md'}`}
                                 >
-                                  {selectedImages[idx] === img.id ? (
+                                  {isSelectedHere ? (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/90 backdrop-blur-sm z-10 transition-all">
                                       <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white shadow-md mb-2">
                                         <Check className="h-6 w-6" />
@@ -282,10 +315,10 @@ const RegisterPage = () => {
                                     </div>
                                   ) : null}
                                   
-                                  <span className={`text-4xl mb-2 drop-shadow-sm transition-opacity duration-300 ${selectedImages[idx] === img.id ? 'opacity-0' : 'opacity-100'}`}>{img.emoji}</span>
-                                  <span className={`text-xs font-semibold text-gray-600 transition-opacity duration-300 ${selectedImages[idx] === img.id ? 'opacity-0' : 'opacity-100'}`}>{img.name}</span>
+                                  <span className={`text-4xl mb-2 drop-shadow-sm transition-opacity duration-300 ${isSelectedHere ? 'opacity-0' : 'opacity-100'}`}>{img.emoji}</span>
+                                  <span className={`text-xs font-semibold text-gray-600 transition-opacity duration-300 ${isSelectedHere ? 'opacity-0' : 'opacity-100'}`}>{img.name}</span>
                                 </div>
-                              ))
+                              )})
                             ) : (
                               <div className="col-span-full h-28 flex items-center justify-center text-gray-400">
                                 <Loader2 className="animate-spin h-6 w-6 mr-2" /> Loading options...

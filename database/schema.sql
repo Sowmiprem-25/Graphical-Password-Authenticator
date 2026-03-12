@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   email               VARCHAR(255) NOT NULL UNIQUE,
   account_status      VARCHAR(20) NOT NULL DEFAULT 'active'
                         CHECK (account_status IN ('active', 'locked', 'suspended')),
+  image_category      VARCHAR(50) NOT NULL DEFAULT 'mixed'
+                        CHECK (image_category IN ('mixed', 'animals', 'food', 'vehicles', 'nature', 'objects', 'technology', 'symbols', 'tools')),
   failed_attempt_count INTEGER NOT NULL DEFAULT 0,
   locked_until        TIMESTAMP WITH TIME ZONE,
   created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status);
+CREATE INDEX IF NOT EXISTS idx_users_category ON users(image_category);
 
 -- ============================================================
 -- Table 2: user_memory_cues

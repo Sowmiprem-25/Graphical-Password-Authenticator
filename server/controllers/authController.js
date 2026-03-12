@@ -8,9 +8,23 @@ const getImageById = (id) => IMAGE_LIBRARY.find((img) => img.id === id);
 
 const shuffleArray = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
-const getRandomImages = (count, excludeIds = []) => {
-  const pool = IMAGE_LIBRARY.filter((img) => !excludeIds.includes(img.id));
-  return shuffleArray(pool).slice(0, count);
+const getRandomImages = (count, excludeIds = [], category = 'mixed') => {
+  let pool = IMAGE_LIBRARY;
+  
+  if (category && category !== 'mixed') {
+    pool = pool.filter(img => img.category === category);
+  }
+
+  let availablePool = pool.filter(img => !excludeIds.includes(img.id));
+  
+  if (availablePool.length < count) {
+    const needed = count - availablePool.length;
+    const excludedPool = pool.filter(img => excludeIds.includes(img.id));
+    const reused = shuffleArray(excludedPool).slice(0, needed);
+    availablePool = [...availablePool, ...reused];
+  }
+
+  return shuffleArray(availablePool).slice(0, count);
 };
 
 const signToken = (userId) =>
@@ -89,7 +103,7 @@ const handleFailedAttempt = async (userId, ip) => {
 const register = async (req, res, next) => {
   const client = await require('../config/db').getClient();
   try {
-    const { name, email, cues, imageSequence } = req.body;
+    const { name, email, cues, imageSequence, imageCategory = 'mixed' } = req.body;
 
     // Validate cues array
     if (!Array.isArray(cues) || cues.length < 3 || cues.length > 5) {
@@ -143,8 +157,8 @@ const register = async (req, res, next) => {
 
     // 1. Create user
     const userResult = await client.query(
-      `INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, name, email, created_at`,
-      [name.trim(), email.toLowerCase().trim()]
+      `INSERT INTO users (name, email, image_category) VALUES ($1, $2, $3) RETURNING id, name, email, image_category, created_at`,
+      [name.trim(), email.toLowerCase().trim(), imageCategory]
     );
     const user = userResult.rows[0];
 
@@ -201,8 +215,9 @@ const getImageOptions = async (req, res, next) => {
     const alreadySelected = req.query.alreadySelected
       ? req.query.alreadySelected.split(',').filter(Boolean)
       : [];
+    const category = req.query.category || 'mixed';
 
-    const options = getRandomImages(6, alreadySelected);
+    const options = getRandomImages(6, alreadySelected, category);
 
     res.json({
       success: true,
@@ -233,7 +248,7 @@ const login = async (req, res, next) => {
 
     // Fetch user
     const userResult = await query(
-      `SELECT id, name, email, account_status, failed_attempt_count, locked_until
+      `SELECT id, name, email, account_status, failed_attempt_count, locked_until, image_category
        FROM users WHERE email=$1`,
       [email.toLowerCase().trim()]
     );
@@ -283,8 +298,21 @@ const login = async (req, res, next) => {
       const correctIds = mappings.rows.map((r) => r.image_id);
 
       // Build shuffled 4x4 grid (correct + decoys)
-      const decoyPool = IMAGE_LIBRARY.filter((img) => !correctIds.includes(img.id));
-      const decoys = shuffleArray(decoyPool).slice(0, 16 - correctIds.length);
+      const decoysNeeded = 16 - correctIds.length;
+      let availableDecoys = IMAGE_LIBRARY.filter(img => !correctIds.includes(img.id));
+      let decoys = [];
+
+      if (user.image_category && user.image_category !== 'mixed') {
+        const categoryDecoys = shuffleArray(availableDecoys.filter(img => img.category === user.image_category));
+        decoys = [...categoryDecoys.slice(0, decoysNeeded)];
+        if (decoys.length < decoysNeeded) {
+          const paddingPool = shuffleArray(availableDecoys.filter(img => img.category !== user.image_category));
+          decoys = [...decoys, ...paddingPool.slice(0, decoysNeeded - decoys.length)];
+        }
+      } else {
+        decoys = shuffleArray(availableDecoys).slice(0, decoysNeeded);
+      }
+
       const correctImages = correctIds.map(getImageById).filter(Boolean);
       const grid = shuffleArray([...correctImages, ...decoys]);
 

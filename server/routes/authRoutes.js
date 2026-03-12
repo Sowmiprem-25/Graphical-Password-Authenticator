@@ -20,6 +20,10 @@ router.post(
       .notEmpty().withMessage('Email is required.')
       .isEmail().withMessage('Please enter a valid email address.')
       .normalizeEmail(),
+    body('imageCategory')
+      .optional()
+      .isIn(['mixed', 'animals', 'food', 'vehicles', 'nature', 'objects', 'technology', 'symbols', 'tools'])
+      .withMessage('Invalid image category selected.'),
     body('cues')
       .isArray({ min: 3, max: 5 })
       .withMessage('You must provide between 3 and 5 memory cues.'),
