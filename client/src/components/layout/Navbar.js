@@ -32,13 +32,14 @@ const Navbar = () => {
                     <span className="hidden sm:inline">Dashboard</span>
                   </div>
                 </Link>
-                {/* Admin toggle for demo purposes */}
-                <Link to="/admin" className="nav-link text-textDark hover:bg-gray-100/50">
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    <span className="hidden sm:inline">Admin</span>
-                  </div>
-                </Link>
+                {user.email === 'admin@gmail.com' && (
+                  <Link to="/admin" className="nav-link text-textDark hover:bg-gray-100/50">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      <span className="hidden sm:inline">Admin</span>
+                    </div>
+                  </Link>
+                )}
                 <button
                   onClick={handleLogout}
                   className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700 ml-2"

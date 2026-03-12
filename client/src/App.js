@@ -31,6 +31,13 @@ const GuestRoute = ({ children }) => {
   return !user ? children : <Navigate to="/dashboard" replace />;
 };
 
+// Admin-only route wrapper
+const AdminRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  return user && user.email === 'admin@gmail.com' ? children : <Navigate to="/dashboard" replace />;
+};
+
 const AppRoutes = () => (
   <>
     <Navbar />
@@ -39,7 +46,7 @@ const AppRoutes = () => (
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   </>
