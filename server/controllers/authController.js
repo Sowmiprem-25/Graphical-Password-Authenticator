@@ -46,7 +46,7 @@ const checkAccountLock = async (userId) => {
 
 // ── Handle Failed Attempt ─────────────────────────────────────
 const handleFailedAttempt = async (userId, ip) => {
-  const threshold = parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 10;
+  const threshold = parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 3;
   const lockMs = parseInt(process.env.ACCOUNT_LOCK_DURATION_MS) || 900000;
 
   const result = await query(
@@ -72,11 +72,11 @@ const handleFailedAttempt = async (userId, ip) => {
   }
 
   // Generate alert at intervals
-  if (count === 5) {
+  if (count === 2) {
     await query(
       `INSERT INTO security_alerts (user_id, alert_type, severity, message, ip_address)
        VALUES ($1, 'repeated_failures', 'medium', $2, $3)`,
-      [userId, `5 consecutive failed login attempts detected`, ip]
+      [userId, `2 consecutive failed login attempts detected`, ip]
     );
   }
 
@@ -340,7 +340,7 @@ const login = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Incorrect image sequence. Please try again.',
-        attemptsLeft: Math.max(0, (parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 10) - (lockResult.failedCount || 0)),
+        attemptsLeft: Math.max(0, (parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 3) - (lockResult.failedCount || 0)),
       });
     }
 

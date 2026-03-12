@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Calendar, Hash, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Calendar, Hash, ArrowRight, ShieldAlert, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import api from '../services/api';
 
 const DashboardPage = () => {
   const { user } = useAuth();
   const [greeting, setGreeting] = useState('');
+  const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -13,6 +16,20 @@ const DashboardPage = () => {
     else if (hour < 18) setGreeting('Good afternoon');
     else setGreeting('Good evening');
   }, []);
+
+  useEffect(() => {
+    if (user?.email === 'admin@gmail.com') {
+      const fetchAlerts = async () => {
+        try {
+          const res = await api.get('/admin/alerts?limit=3');
+          setAlerts(res.data.alerts || []);
+        } catch (error) {
+          console.error('Failed to load recent alerts');
+        }
+      };
+      fetchAlerts();
+    }
+  }, [user]);
 
   return (
     <div className="page-container py-12">
@@ -88,24 +105,64 @@ const DashboardPage = () => {
           </motion.div>
         </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="mt-8 card"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-900">Recent Security Events</h3>
-            <button className="text-sm font-semibold text-primary hover:text-primary-600 flex items-center gap-1 transition-colors">
-              View All <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-8 text-center border-2 border-dashed border-gray-200">
-            <ShieldCheck className="h-12 w-12 text-gray-400 mx-auto mb-3 opacity-50" />
-            <p className="text-gray-500 font-medium">No recent security alerts.</p>
-            <p className="text-sm text-gray-400 mt-1">Your account hasn't had any suspicious login attempts.</p>
-          </div>
-        </motion.div>
+        {user?.email === 'admin@gmail.com' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-8 card"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Recent Security Events</h3>
+              <Link to="/admin" className="text-sm font-semibold text-primary hover:text-primary-600 flex items-center gap-1 transition-colors">
+                View All <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            
+            {alerts.length > 0 ? (
+              <div className="space-y-4">
+                {alerts.map(alert => (
+                  <div key={alert.id} className="card border-l-[6px] border border-gray-100 border-l-red-500 shadow-sm hover:shadow-md transition-shadow flex items-start gap-4 p-5 bg-white relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 rounded-full blur-3xl -mr-16 -mt-16 z-0" />
+                    
+                    <div className="p-3 bg-red-100 rounded-xl relative z-10 shrink-0">
+                      <ShieldAlert className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div className="flex-1 relative z-10">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-extrabold text-gray-900 text-lg uppercase tracking-tight">{alert.alert_type.replace('_', ' ')}</h4>
+                        <span className="text-xs font-bold text-gray-400 font-mono tracking-wider">
+                          {new Date(alert.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-gray-700 font-medium mb-3">{alert.message}</p>
+                      
+                      <div className="flex flex-wrap gap-2 text-sm mt-3 pt-3 border-t border-gray-100">
+                        {alert.user_name && (
+                          <span className="bg-gray-100 font-semibold px-2.5 py-1 rounded text-gray-700 flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5"/> {alert.user_name}
+                          </span>
+                        )}
+                        <span className="bg-gray-100 font-mono text-xs px-2.5 py-1 rounded text-gray-600 flex items-center gap-1">
+                          IP: {alert.ip_address}
+                        </span>
+                        <span className="bg-red-50 tracking-wider text-red-700 font-bold uppercase text-[10px] px-2.5 py-1 rounded border border-red-200">
+                          {alert.severity} Priority
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-xl p-8 text-center border-2 border-dashed border-gray-200">
+                <ShieldCheck className="h-12 w-12 text-gray-400 mx-auto mb-3 opacity-50" />
+                <p className="text-gray-500 font-medium">No recent security alerts.</p>
+                <p className="text-sm text-gray-400 mt-1">System hasn't generated any suspicious login attempts recently.</p>
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
     </div>
   );

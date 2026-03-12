@@ -9,6 +9,24 @@ import { KeyRound, Loader2, ArrowRight, RefreshCw, Clock, AlertTriangle } from '
 const MAX_SHUFFLES = 3;
 const SHUFFLE_INTERVAL_MS = 15000; // 15 seconds
 
+// ── Helper: show a prominent lock alert then redirect to landing ──
+const showLockAndRedirect = (msg, navigateFn) => {
+  toast.error(
+    (t) => (
+      <div className="flex items-start gap-3">
+        <span className="text-2xl">🔒</span>
+        <div>
+          <p className="font-bold text-red-700 text-sm">Account Locked</p>
+          <p className="text-xs text-gray-600 mt-0.5">{msg}</p>
+        </div>
+      </div>
+    ),
+    { duration: 5000, style: { border: '1.5px solid #fca5a5', background: '#fff7f7' } }
+  );
+  // Small delay so the user sees the toast before redirect
+  setTimeout(() => navigateFn('/'), 2000);
+};
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -51,7 +69,11 @@ const LoginPage = () => {
       setPhase(2);
     } catch (err) {
       if (err.response?.status === 423) {
-        toast.error(err.response.data.message || 'Account locked due to too many failed attempts.');
+        // Account is locked — alert and redirect to landing page
+        const msg =
+          err.response?.data?.message ||
+          'Your account has been locked due to too many failed attempts.';
+        showLockAndRedirect(msg, navigate);
       } else {
         toast.error(err.response?.data?.message || 'Login failed. Please verify your email.');
       }
@@ -63,7 +85,6 @@ const LoginPage = () => {
   // ── Phase 2: Image click ──────────────────────────────────────
 
   const handleImageClick = (imageId) => {
-    // Prevent re-clicking an already selected image
     if (selectedSequence.includes(imageId)) return;
     if (selectedSequence.length >= sequenceLength) return;
     setSelectedSequence((prev) => [...prev, imageId]);
@@ -83,14 +104,16 @@ const LoginPage = () => {
       login(res.data.token, res.data.user);
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Incorrect sequence. Try again.');
-      setSelectedSequence([]);
+      const msg =
+        err.response?.data?.message || err.message || 'Incorrect sequence. Try again.';
 
       if (err.response?.status === 423) {
-        // Account locked — go back to email phase
-        setPhase(1);
+        // Account just got locked — alert and redirect to landing page
+        showLockAndRedirect(msg, navigate);
       } else {
-        // Re-fetch a freshly shuffled grid on every failed attempt
+        toast.error(msg);
+        setSelectedSequence([]);
+        // Re-fetch a freshly shuffled grid on failed attempt
         await fetchNewGrid(email);
       }
     } finally {
@@ -99,8 +122,6 @@ const LoginPage = () => {
   };
 
   // ── Auto-shuffle timer ────────────────────────────────────────
-  // Uses a local `shuffleCount` variable inside the effect closure to avoid
-  // stale-state reads inside setInterval callbacks.
   useEffect(() => {
     if (phase !== 2) return;
 
@@ -151,7 +172,7 @@ const LoginPage = () => {
       clearInterval(shuffleTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, email]); // Re-runs if email changes (shouldn't in practice)
+  }, [phase, email]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -281,8 +302,6 @@ const LoginPage = () => {
                       return (
                         <motion.div
                           key={img.id}
-                          // Disable hover/tap animations for selected cells so the
-                          // interaction itself doesn't reveal which images were picked.
                           whileHover={isSelected ? {} : { scale: 1.05 }}
                           whileTap={isSelected ? {} : { scale: 0.95 }}
                           onClick={() => handleImageClick(img.id)}
@@ -297,10 +316,6 @@ const LoginPage = () => {
                         >
                           <AnimatePresence mode="wait" initial={false}>
                             {isSelected ? (
-                              /* ── SELECTED STATE: completely blank cell ──
-                                 Only a tiny neutral dot is shown. No emoji, no label,
-                                 no "Selected" text — nothing for a shoulder surfer to
-                                 identify which image was chosen. */
                               <motion.div
                                 key="blank"
                                 initial={{ opacity: 0 }}
@@ -312,7 +327,6 @@ const LoginPage = () => {
                                 <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
                               </motion.div>
                             ) : (
-                              /* ── UNSELECTED STATE: show emoji + label ── */
                               <motion.div
                                 key="image"
                                 initial={{ opacity: 0 }}
