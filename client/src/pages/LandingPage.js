@@ -146,22 +146,6 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 relative overflow-hidden bg-primary text-white">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
-        <div className="relative z-10 max-w-4xl mx-auto text-center px-4">
-          <h2 className="text-4xl font-bold mb-6 tracking-tight">Ready to stop typing passwords?</h2>
-          <p className="text-xl text-primary-100 mb-10">
-            Join the Graphical Authentication revolution today and secure your account faster and more reliably.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-             <Link to="/register" className="btn-accent text-lg px-8 py-4 shadow-lg flex items-center justify-center gap-2 group">
-                Create Free Account
-                <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-             </Link>
-          </div>
-        </div>
-      </section>
     </div>
   );
 };

@@ -47,16 +47,7 @@ const Navbar = () => {
                   <span className="hidden sm:inline font-semibold">Logout</span>
                 </button>
               </>
-            ) : (
-              <>
-                <Link to="/login" className="btn-ghost border border-primary text-primary hover:bg-primary/5">
-                  Login
-                </Link>
-                <Link to="/register" className="btn-primary py-2 px-4 rounded-lg shadow-sm">
-                  Register
-                </Link>
-              </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

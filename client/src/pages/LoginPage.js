@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { KeyRound, Loader2, ArrowRight, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
 
 const MAX_SHUFFLES = 3;
-const SHUFFLE_INTERVAL_MS = 30000; // 30 seconds
+const SHUFFLE_INTERVAL_MS = 15000; // 15 seconds
 
 const LoginPage = () => {
   const navigate = useNavigate();
