@@ -1,6 +1,6 @@
 const rateLimit = require('express-rate-limit');
 const { query } = require('../config/db');
-const { sendSecurityAlertEmail } = require('../utils/email');
+const { sendSecurityAlertEmail } = require('../services/emailService');
 
 // ── Global rate limiter (loose, anti-flood) ──────────────────
 const globalRateLimiter = rateLimit({
@@ -36,6 +36,7 @@ const authRateLimiter = rateLimit({
           );
 
           await sendSecurityAlertEmail(u.email, u.name, {
+            alertType: 'brute_force_warning',
             message: `Unusually high volume of rapid login attempts detected from your IP address. This could indicate a brute-force attack.`,
             ip: req.ip,
             userAgent: req.headers['user-agent'] || 'unknown',

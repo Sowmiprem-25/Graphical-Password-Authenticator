@@ -2,8 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const IMAGE_LIBRARY = require('../data/imageLibrary');
-const { sendSecurityAlertEmail, sendOTPEmail } = require('../utils/email');
-const { sendOtpEmail } = require('../services/emailService');
+const { sendOtpEmail, sendSecurityAlertEmail, sendForgotPasswordEmail } = require('../services/emailService');
 const crypto = require('crypto');
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -92,7 +91,8 @@ const handleFailedAttempt = async (userId, ip, userAgent) => {
 
     if (u) {
       await sendSecurityAlertEmail(u.email, u.name, {
-        message: `Your account was locked due to too many failed attempts. It will automatically unlock in ${Math.ceil(lockMs / 60000)} minutes.`,
+        alertType: 'account_locked',
+        message: `Your account was locked due to too many failed attempts (${count}). It will automatically unlock in ${Math.ceil(lockMs / 60000)} minutes.`,
         ip,
         userAgent,
         timestamp: new Date()
@@ -115,7 +115,8 @@ const handleFailedAttempt = async (userId, ip, userAgent) => {
 
     if (u) {
       await sendSecurityAlertEmail(u.email, u.name, {
-        message: `We detected multiple failed login attempts. If this continues, your account will temporarily lock.`,
+        alertType: 'repeated_failures',
+        message: `We detected multiple failed login attempts (${count}). If this continues, your account will temporarily lock.`,
         ip,
         userAgent,
         timestamp: new Date()
@@ -550,7 +551,7 @@ const forgotPassword = async (req, res, next) => {
       [otp, expires, user.id]
     );
 
-    await sendOTPEmail(email, user.name, otp);
+    await sendForgotPasswordEmail(email, user.name, otp);
 
     res.json({ success: true, message: 'OTP sent to your email.' });
   } catch (err) {
@@ -628,6 +629,7 @@ const resetPassword = async (req, res, next) => {
     await client.query('COMMIT');
 
     await sendSecurityAlertEmail(email, user.name, {
+      alertType: 'password_reset_success',
       message: 'Your graphical password has been successfully reset.',
       ip: getClientIp(req),
       userAgent: req.headers['user-agent'] || 'unknown',
