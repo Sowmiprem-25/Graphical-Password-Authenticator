@@ -2,16 +2,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const IMAGE_LIBRARY = require('../data/imageLibrary');
-<<<<<<< HEAD
 const { sendSecurityAlertEmail, sendOTPEmail } = require('../utils/email');
-const crypto = require('crypto');
-=======
 const { sendOtpEmail } = require('../services/emailService');
-
-// ── In-Memory OTP Store ───────────────────────────────────────
-// Map<userId(string), { otp, expiresAt }>
-const otpStore = new Map();
->>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
+const crypto = require('crypto');
 
 // ── Helpers ──────────────────────────────────────────────────
 const getImageById = (id) => IMAGE_LIBRARY.find((img) => img.id === id);
@@ -269,6 +262,9 @@ const getImageOptions = async (req, res, next) => {
   }
 };
 
+// ── In-Memory MFA OTP Store ───────────────────────────────────
+const mfaOtpStore = new Map();
+
 // ══════════════════════════════════════════════════════════════
 // POST /auth/login
 // ══════════════════════════════════════════════════════════════
@@ -407,89 +403,83 @@ const login = async (req, res, next) => {
         attemptsLeft: Math.max(0, (parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 3) - (lockResult.failedCount || 0)),
       });
     }
-
-    // ── Graphical password correct → generate & send OTP ──────
+    // ── SUCCESS: Sequence Correct! ──
     await logAttempt(user.id, true);
     await query(
       `UPDATE users SET failed_attempt_count=0, locked_until=NULL WHERE id=$1`,
       [user.id]
     );
 
-    // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = Date.now() + (parseInt(process.env.OTP_EXPIRES_MS) || 300000);
-    otpStore.set(String(user.id), { otp, expiresAt });
+    // ── Generate & Send MFA OTP ──
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 5 * 60000; // 5 mins
+    mfaOtpStore.set(user.id.toString(), { otp, expiresAt });
 
-    // Send OTP via email (non-blocking failure — log but don't crash)
     try {
       await sendOtpEmail(user.email, otp, user.name);
-    } catch (mailErr) {
-      console.error('[OTP Email Error]', mailErr.message);
-      // Clear OTP if we can't send — don't leave a dangling entry
-      otpStore.delete(String(user.id));
-      return res.status(503).json({
-        success: false,
-        message: 'Could not send OTP email. Please try again or contact support.',
+      
+      return res.status(202).json({
+        success: true,
+        otpPending: true,
+        userId: user.id,
+        message: `A verification code has been sent to ${user.email}.`
+      });
+    } catch (emailErr) {
+      console.error('Failed to send MFA email:', emailErr);
+      // If email fails in dev, we still might want to allow it? 
+      // For security, usually we block. For now, let's provide a clear error.
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Graphical password correct, but failed to send verification email. Please try again.' 
       });
     }
-
-    return res.status(202).json({
-      success: true,
-      otpPending: true,
-      userId: user.id,
-      message: `A 6-digit verification code has been sent to ${user.email}. Enter it to complete login.`,
-    });
   } catch (err) {
     next(err);
   }
 };
 
 // ══════════════════════════════════════════════════════════════
-// POST /auth/verify-otp
-// Body: { userId, otp }
+// POST /auth/verify-otp (MFA LOGIN)
 // ══════════════════════════════════════════════════════════════
 const verifyOtp = async (req, res, next) => {
   try {
-    const { userId, otp } = req.body;
-
-    if (!userId || !otp) {
-      return res.status(400).json({ success: false, message: 'userId and otp are required.' });
+    const { userId, email, otp } = req.body;
+    
+    // ── CASE 1: Login MFA (Uses userId + In-memory store) ──
+    if (userId) {
+      const record = mfaOtpStore.get(userId.toString());
+      if (!record || Date.now() > record.expiresAt) {
+        mfaOtpStore.delete(userId.toString());
+        return res.status(410).json({ success: false, message: 'OTP expired or session not found.' });
+      }
+      if (record.otp !== otp) {
+        return res.status(401).json({ success: false, message: 'Incorrect verification code.' });
+      }
+      mfaOtpStore.delete(userId.toString());
+      const userResult = await query('SELECT id, name, email FROM users WHERE id=$1', [userId]);
+      const user = userResult.rows[0];
+      const token = signToken(user.id);
+      return res.json({
+        success: true,
+        message: 'Logged in successfully.',
+        token,
+        user: { id: user.id, name: user.name, email: user.email }
+      });
     }
 
-    const record = otpStore.get(String(userId));
-
-    if (!record) {
-      return res.status(400).json({ success: false, message: 'No OTP found. Please restart the login process.' });
+    // ── CASE 2: Password Reset (Uses email + DB store) ──
+    if (email) {
+      const userResult = await query(
+        'SELECT id FROM users WHERE email=$1 AND reset_otp=$2 AND reset_otp_expires > NOW()',
+        [email.toLowerCase().trim(), otp]
+      );
+      if (!userResult.rows.length) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+      }
+      return res.json({ success: true, message: 'OTP verified.' });
     }
 
-    if (Date.now() > record.expiresAt) {
-      otpStore.delete(String(userId));
-      return res.status(410).json({ success: false, message: 'OTP has expired. Please login again.' });
-    }
-
-    if (String(otp).trim() !== record.otp) {
-      return res.status(401).json({ success: false, message: 'Incorrect OTP. Please try again.' });
-    }
-
-    // OTP verified — clean it up and issue JWT
-    otpStore.delete(String(userId));
-
-    const userResult = await query(
-      `SELECT id, name, email FROM users WHERE id=$1`,
-      [userId]
-    );
-    if (!userResult.rows.length) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
-    }
-    const user = userResult.rows[0];
-    const token = signToken(user.id);
-
-    res.json({
-      success: true,
-      message: 'Login successful! Welcome back.',
-      token,
-      user: { id: user.id, name: user.name, email: user.email },
-    });
+    return res.status(400).json({ success: false, message: 'Missing userId or email.' });
   } catch (err) {
     next(err);
   }
@@ -539,7 +529,6 @@ const getMe = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
 // ══════════════════════════════════════════════════════════════
 // POST /auth/forgot-password
 // ══════════════════════════════════════════════════════════════
@@ -549,13 +538,12 @@ const forgotPassword = async (req, res, next) => {
     const userResult = await query('SELECT id, name FROM users WHERE email=$1', [email.toLowerCase().trim()]);
     
     if (!userResult.rows.length) {
-      // Don't reveal if user exists, but send 200 to avoid enumeration
       return res.json({ success: true, message: 'If an account exists with this email, you will receive an OTP shortly.' });
     }
 
     const user = userResult.rows[0];
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
-    const expires = new Date(Date.now() + 10 * 60000); // 10 minutes
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60000);
 
     await query(
       `UPDATE users SET reset_otp=$1, reset_otp_expires=$2 WHERE id=$3`,
@@ -573,23 +561,10 @@ const forgotPassword = async (req, res, next) => {
 // ══════════════════════════════════════════════════════════════
 // POST /auth/verify-otp
 // ══════════════════════════════════════════════════════════════
+// This function is now merged into verifyOtp
+// keep it as a no-op or remove if routes are updated
 const verifyResetOTP = async (req, res, next) => {
-  try {
-    const { email, otp } = req.body;
-    const userResult = await query(
-      'SELECT id FROM users WHERE email=$1 AND reset_otp=$2 AND reset_otp_expires > NOW()',
-      [email.toLowerCase().trim(), otp]
-    );
-
-    if (!userResult.rows.length) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
-    }
-
-    // Return a temporary "reset token" or just confirm it's valid for the next step
-    res.json({ success: true, message: 'OTP verified.' });
-  } catch (err) {
-    next(err);
-  }
+  return verifyOtp(req, res, next);
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -600,7 +575,6 @@ const resetPassword = async (req, res, next) => {
   try {
     const { email, otp, cues, imageSequence, imageCategory = 'mixed' } = req.body;
 
-    // 1. Verify OTP one last time
     const userResult = await client.query(
       'SELECT id, name FROM users WHERE email=$1 AND reset_otp=$2 AND reset_otp_expires > NOW()',
       [email.toLowerCase().trim(), otp]
@@ -612,7 +586,6 @@ const resetPassword = async (req, res, next) => {
 
     const user = userResult.rows[0];
 
-    // 2. Validate new sequence (same logic as register)
     if (!Array.isArray(cues) || cues.length < 3 || cues.length > 5) {
       return res.status(400).json({ success: false, message: 'You must provide between 3 and 5 memory cues.' });
     }
@@ -623,12 +596,10 @@ const resetPassword = async (req, res, next) => {
 
     await client.query('BEGIN');
 
-    // Remove old cues & mappings
     await client.query('DELETE FROM user_image_mappings WHERE user_id=$1', [user.id]);
     await client.query('DELETE FROM user_memory_cues WHERE user_id=$1', [user.id]);
     await client.query('DELETE FROM auth_sequences WHERE user_id=$1', [user.id]);
 
-    // Insert new cues
     const cueIds = [];
     for (let i = 0; i < cues.length; i++) {
       const cueResult = await client.query(
@@ -638,7 +609,6 @@ const resetPassword = async (req, res, next) => {
       cueIds.push(cueResult.rows[0].id);
     }
 
-    // Insert new mappings
     for (let i = 0; i < imageSequence.length; i++) {
       await client.query(
         `INSERT INTO user_image_mappings (user_id, cue_id, image_id, image_order)
@@ -647,21 +617,18 @@ const resetPassword = async (req, res, next) => {
       );
     }
 
-    // Update sequence hash
     await client.query(
       `INSERT INTO auth_sequences (user_id, sequence_hash, sequence_length)
        VALUES ($1, $2, $3)`,
       [user.id, sequenceHash, imageSequence.length]
     );
 
-    // Update image category
     await client.query('UPDATE users SET image_category=$1, reset_otp=NULL, reset_otp_expires=NULL WHERE id=$2', [imageCategory, user.id]);
 
     await client.query('COMMIT');
 
-    // Notify user of change
     await sendSecurityAlertEmail(email, user.name, {
-      message: 'Your graphical password has been successfully reset. If you did not perform this action, please contact support immediately.',
+      message: 'Your graphical password has been successfully reset.',
       ip: getClientIp(req),
       userAgent: req.headers['user-agent'] || 'unknown',
       timestamp: new Date()
@@ -676,7 +643,4 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
-module.exports = { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword };
-=======
-module.exports = { register, getImageOptions, login, verifyOtp, getMe };
->>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
+module.exports = { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword, verifyOtp };

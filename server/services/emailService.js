@@ -1,29 +1,47 @@
 const nodemailer = require('nodemailer');
 
-// Create a reusable transporter
-const transporter = nodemailer.createTransport({
+// ── Transporter 1 (Default) ───────────────────────────────────
+const transporter1 = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false, // TLS (STARTTLS on port 587)
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
-// All OTPs are routed to this fixed inbox (for development / demo purposes)
-const OTP_DELIVERY_EMAIL = process.env.SMTP_USER;
+// ── Transporter 2 (Alternate) ─────────────────────────────────
+const transporter2 = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER_ALT,
+    pass: process.env.SMTP_PASS_ALT,
+  },
+});
+
+const getRecipientEmail = (toEmail) => {
+  if (process.env.NODE_ENV === 'development' && process.env.REDIRECT_ALL_EMAILS === 'true') {
+    return process.env.SMTP_USER;
+  }
+  return toEmail;
+};
 
 /**
  * Sends a 6-digit OTP email.
- * NOTE: Regardless of the user's registered email, the OTP is always
- *       delivered to OTP_DELIVERY_EMAIL (i.e. SMTP_USER).
- * @param {string} toEmail  - The user's registered email (shown in email body)
- * @param {string} otp      - 6-digit OTP code
- * @param {string} userName - Recipient's display name
+ * Picks the transporter based on the target email.
  */
 const sendOtpEmail = async (toEmail, otp, userName = 'User') => {
   const expiryMinutes = Math.ceil((parseInt(process.env.OTP_EXPIRES_MS) || 300000) / 60000);
+  
+  // Decide which account to send from
+  const useAlt = toEmail.toLowerCase().includes('sahanasakthivel2018@gmail.com');
+  const transporter = useAlt ? transporter2 : transporter1;
+  const senderEmail = useAlt ? process.env.SMTP_USER_ALT : process.env.SMTP_USER;
+
+  console.log(`[EMAIL] Sending from: ${senderEmail} to: ${toEmail}`);
 
   const html = `
   <!DOCTYPE html>
@@ -102,13 +120,19 @@ const sendOtpEmail = async (toEmail, otp, userName = 'User') => {
   </html>
   `;
 
-  await transporter.sendMail({
-    from: `"Graphical Auth" <${process.env.SMTP_USER}>`,
-    to: OTP_DELIVERY_EMAIL,   // always delivered to the SMTP owner's inbox
-    subject: `🔐 OTP for ${toEmail} — ${otp} (expires in ${expiryMinutes} min)`,
-    text: `Hi ${userName},\n\nLogin requested for: ${toEmail}\nYour one-time verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.\n\n— Graphical Password Authenticator`,
-    html,
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: `"Graphical Auth" <${senderEmail}>`,
+      to: getRecipientEmail(toEmail),
+      subject: `🔐 OTP for ${toEmail} — ${otp} (expires in ${expiryMinutes} min)`,
+      text: `Hi ${userName},\n\nLogin requested for: ${toEmail}\nYour one-time verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.\n\n— Graphical Password Authenticator`,
+      html,
+    });
+    console.log('[EMAIL] Success! Message ID:', info.messageId);
+  } catch (error) {
+    console.error('[EMAIL] Failed to send email:', error);
+    throw error;
+  }
 };
 
 module.exports = { sendOtpEmail };
