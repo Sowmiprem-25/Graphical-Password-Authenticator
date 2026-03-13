@@ -144,7 +144,7 @@ const DashboardPage = () => {
                           </span>
                         )}
                         <span className="bg-gray-100 font-mono text-xs px-2.5 py-1 rounded text-gray-600 flex items-center gap-1">
-                          IP: {alert.ip_address}
+                          IP: {alert.ip_address} {alert.location && <span className="text-[10px] font-sans font-bold text-gray-400 ml-1 block truncate max-w-[120px]" title={alert.location}>({alert.location})</span>}
                         </span>
                         <span className="bg-red-50 tracking-wider text-red-700 font-bold uppercase text-[10px] px-2.5 py-1 rounded border border-red-200">
                           {alert.severity} Priority

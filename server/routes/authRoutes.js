@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { register, getImageOptions, login, getMe } = require('../controllers/authController');
+const { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { authRateLimiter } = require('../middleware/rateLimiter');
 const validate = require('../middleware/validate');
@@ -59,6 +59,11 @@ router.post(
   validate,
   login
 );
+
+// ── Forgot Password ──────────────────────────────────────────
+router.post('/forgot-password', authRateLimiter, forgotPassword);
+router.post('/verify-otp', authRateLimiter, verifyResetOTP);
+router.post('/reset-password', authRateLimiter, resetPassword);
 
 // ── GET /auth/me ──────────────────────────────────────────────
 router.get('/me', protect, getMe);

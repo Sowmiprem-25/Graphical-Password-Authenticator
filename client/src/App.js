@@ -6,9 +6,11 @@ import Navbar from './components/layout/Navbar';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import NotFoundPage from './pages/NotFoundPage';
+import IPSimulationOverlay from './components/dev/IPSimulationOverlay';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -45,6 +47,7 @@ const AppRoutes = () => (
       <Route path="/" element={<LandingPage />} />
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+      <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
       <Route path="*" element={<NotFoundPage />} />
@@ -57,6 +60,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <IPSimulationOverlay />
         <Toaster
           position="top-right"
           toastOptions={{

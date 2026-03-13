@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const IMAGE_LIBRARY = require('../data/imageLibrary');
+const { sendSecurityAlertEmail, sendOTPEmail } = require('../utils/email');
+const crypto = require('crypto');
 
 // ── Helpers ──────────────────────────────────────────────────
 const getImageById = (id) => IMAGE_LIBRARY.find((img) => img.id === id);
@@ -59,7 +61,7 @@ const checkAccountLock = async (userId) => {
 };
 
 // ── Handle Failed Attempt ─────────────────────────────────────
-const handleFailedAttempt = async (userId, ip) => {
+const handleFailedAttempt = async (userId, ip, userAgent) => {
   const threshold = parseInt(process.env.ACCOUNT_LOCK_THRESHOLD) || 3;
   const lockMs = parseInt(process.env.ACCOUNT_LOCK_DURATION_MS) || 900000;
 
@@ -77,21 +79,47 @@ const handleFailedAttempt = async (userId, ip) => {
       `UPDATE users SET account_status='locked', locked_until=$1 WHERE id=$2`,
       [lockedUntil, userId]
     );
+    // Fetch user details for email
+    const uResult = await query(`SELECT name, email FROM users WHERE id=$1`, [userId]);
+    const u = uResult.rows[0];
+    
     await query(
       `INSERT INTO security_alerts (user_id, alert_type, severity, message, ip_address)
        VALUES ($1, 'account_locked', 'critical', $2, $3)`,
       [userId, `Account locked after ${count} failed login attempts`, ip]
     );
+
+    if (u) {
+      await sendSecurityAlertEmail(u.email, u.name, {
+        message: `Your account was locked due to too many failed attempts. It will automatically unlock in ${Math.ceil(lockMs / 60000)} minutes.`,
+        ip,
+        userAgent,
+        timestamp: new Date()
+      });
+    }
+
     return { locked: true, lockDurationMinutes: Math.ceil(lockMs / 60000) };
   }
 
   // Generate alert at intervals
   if (count === 2) {
+    const uResult = await query(`SELECT name, email FROM users WHERE id=$1`, [userId]);
+    const u = uResult.rows[0];
+
     await query(
       `INSERT INTO security_alerts (user_id, alert_type, severity, message, ip_address)
        VALUES ($1, 'repeated_failures', 'medium', $2, $3)`,
       [userId, `2 consecutive failed login attempts detected`, ip]
     );
+
+    if (u) {
+      await sendSecurityAlertEmail(u.email, u.name, {
+        message: `We detected multiple failed login attempts. If this continues, your account will temporarily lock.`,
+        ip,
+        userAgent,
+        timestamp: new Date()
+      });
+    }
   }
 
   return { locked: false, failedCount: count };
@@ -346,7 +374,7 @@ const login = async (req, res, next) => {
 
     if (selectedSequence.length !== sequence_length) {
       await logAttempt(user.id, false);
-      await handleFailedAttempt(user.id, ip);
+      await handleFailedAttempt(user.id, ip, userAgent);
       return res.status(401).json({
         success: false,
         message: `Please select exactly ${sequence_length} images in your registered order.`,
@@ -358,7 +386,7 @@ const login = async (req, res, next) => {
 
     if (!isMatch) {
       await logAttempt(user.id, false);
-      const lockResult = await handleFailedAttempt(user.id, ip);
+      const lockResult = await handleFailedAttempt(user.id, ip, userAgent);
       if (lockResult.locked) {
         return res.status(423).json({
           success: false,
@@ -436,4 +464,140 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { register, getImageOptions, login, getMe };
+// ══════════════════════════════════════════════════════════════
+// POST /auth/forgot-password
+// ══════════════════════════════════════════════════════════════
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const userResult = await query('SELECT id, name FROM users WHERE email=$1', [email.toLowerCase().trim()]);
+    
+    if (!userResult.rows.length) {
+      // Don't reveal if user exists, but send 200 to avoid enumeration
+      return res.json({ success: true, message: 'If an account exists with this email, you will receive an OTP shortly.' });
+    }
+
+    const user = userResult.rows[0];
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
+    const expires = new Date(Date.now() + 10 * 60000); // 10 minutes
+
+    await query(
+      `UPDATE users SET reset_otp=$1, reset_otp_expires=$2 WHERE id=$3`,
+      [otp, expires, user.id]
+    );
+
+    await sendOTPEmail(email, user.name, otp);
+
+    res.json({ success: true, message: 'OTP sent to your email.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// POST /auth/verify-otp
+// ══════════════════════════════════════════════════════════════
+const verifyResetOTP = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    const userResult = await query(
+      'SELECT id FROM users WHERE email=$1 AND reset_otp=$2 AND reset_otp_expires > NOW()',
+      [email.toLowerCase().trim(), otp]
+    );
+
+    if (!userResult.rows.length) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+    }
+
+    // Return a temporary "reset token" or just confirm it's valid for the next step
+    res.json({ success: true, message: 'OTP verified.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// POST /auth/reset-password
+// ══════════════════════════════════════════════════════════════
+const resetPassword = async (req, res, next) => {
+  const client = await require('../config/db').getClient();
+  try {
+    const { email, otp, cues, imageSequence, imageCategory = 'mixed' } = req.body;
+
+    // 1. Verify OTP one last time
+    const userResult = await client.query(
+      'SELECT id, name FROM users WHERE email=$1 AND reset_otp=$2 AND reset_otp_expires > NOW()',
+      [email.toLowerCase().trim(), otp]
+    );
+
+    if (!userResult.rows.length) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired reset session.' });
+    }
+
+    const user = userResult.rows[0];
+
+    // 2. Validate new sequence (same logic as register)
+    if (!Array.isArray(cues) || cues.length < 3 || cues.length > 5) {
+      return res.status(400).json({ success: false, message: 'You must provide between 3 and 5 memory cues.' });
+    }
+
+    const sequenceString = imageSequence.join(':');
+    const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+    const sequenceHash = await bcrypt.hash(sequenceString, bcryptRounds);
+
+    await client.query('BEGIN');
+
+    // Remove old cues & mappings
+    await client.query('DELETE FROM user_image_mappings WHERE user_id=$1', [user.id]);
+    await client.query('DELETE FROM user_memory_cues WHERE user_id=$1', [user.id]);
+    await client.query('DELETE FROM auth_sequences WHERE user_id=$1', [user.id]);
+
+    // Insert new cues
+    const cueIds = [];
+    for (let i = 0; i < cues.length; i++) {
+      const cueResult = await client.query(
+        `INSERT INTO user_memory_cues (user_id, cue_value, cue_order) VALUES ($1, $2, $3) RETURNING id`,
+        [user.id, cues[i], i + 1]
+      );
+      cueIds.push(cueResult.rows[0].id);
+    }
+
+    // Insert new mappings
+    for (let i = 0; i < imageSequence.length; i++) {
+      await client.query(
+        `INSERT INTO user_image_mappings (user_id, cue_id, image_id, image_order)
+         VALUES ($1, $2, $3, $4)`,
+        [user.id, cueIds[i], imageSequence[i], i + 1]
+      );
+    }
+
+    // Update sequence hash
+    await client.query(
+      `INSERT INTO auth_sequences (user_id, sequence_hash, sequence_length)
+       VALUES ($1, $2, $3)`,
+      [user.id, sequenceHash, imageSequence.length]
+    );
+
+    // Update image category
+    await client.query('UPDATE users SET image_category=$1, reset_otp=NULL, reset_otp_expires=NULL WHERE id=$2', [imageCategory, user.id]);
+
+    await client.query('COMMIT');
+
+    // Notify user of change
+    await sendSecurityAlertEmail(email, user.name, {
+      message: 'Your graphical password has been successfully reset. If you did not perform this action, please contact support immediately.',
+      ip: getClientIp(req),
+      userAgent: req.headers['user-agent'] || 'unknown',
+      timestamp: new Date()
+    });
+
+    res.json({ success: true, message: 'Password reset successful. You can now log in.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword };

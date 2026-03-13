@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -235,6 +235,11 @@ const LoginPage = () => {
                       : <>Continue to Password Grid <ArrowRight className="h-5 w-5 ml-2 inline" /></>
                     }
                   </button>
+                  <div className="text-center">
+                    <Link to="/forgot-password" size="sm" className="text-sm font-semibold text-gray-400 hover:text-primary transition-colors">
+                      Forgot your graphical sequence?
+                    </Link>
+                  </div>
                 </motion.form>
               )}
 

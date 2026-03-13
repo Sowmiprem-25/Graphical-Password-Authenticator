@@ -45,7 +45,7 @@ const RegisterPage = () => {
       const res = await api.get(`/auth/image-options?alreadySelected=${alreadySelected}`);
       setImageOptions(prev => ({ ...prev, [cueIndex]: res.data.options }));
     } catch (err) {
-      toast.error('Failed to load image options');
+      toast.error(err.message || 'Failed to load image options');
     }
   };
 
@@ -75,7 +75,7 @@ const RegisterPage = () => {
       setImageOptions(newImageOptions);
       setStep(2);
     } catch (err) {
-      toast.error('Failed to load image options');
+      toast.error(err.message || 'Failed to load image options');
     } finally {
       setLoading(false);
     }

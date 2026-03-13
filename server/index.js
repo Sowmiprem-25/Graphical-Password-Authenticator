@@ -23,7 +23,7 @@ app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-simulated-ip'],
 }));
 
 // ── Body Parsing ──────────────────────────────────────────────
@@ -33,6 +33,21 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // ── Logging ───────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+}
+
+// ── IP Simulation (Development Only) ──────────────────────────
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-simulated-ip']) {
+      req.headers['x-forwarded-for'] = req.headers['x-simulated-ip'];
+      // Force rate limiter & controller to see this IP
+      Object.defineProperty(req, 'ip', {
+        configurable: true,
+        get: () => req.headers['x-simulated-ip']
+      });
+    }
+    next();
+  });
 }
 
 // ── Global Rate Limiting ──────────────────────────────────────
