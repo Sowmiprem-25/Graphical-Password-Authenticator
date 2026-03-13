@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
+<<<<<<< HEAD
 const { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/authController');
+=======
+const { register, getImageOptions, login, verifyOtp, getMe } = require('../controllers/authController');
+>>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
 const { protect } = require('../middleware/auth');
 const { authRateLimiter } = require('../middleware/rateLimiter');
 const validate = require('../middleware/validate');
@@ -60,10 +64,27 @@ router.post(
   login
 );
 
+<<<<<<< HEAD
 // ── Forgot Password ──────────────────────────────────────────
 router.post('/forgot-password', authRateLimiter, forgotPassword);
 router.post('/verify-otp', authRateLimiter, verifyResetOTP);
 router.post('/reset-password', authRateLimiter, resetPassword);
+=======
+// ── POST /auth/verify-otp ──────────────────────────────────
+router.post(
+  '/verify-otp',
+  [
+    body('userId').notEmpty().withMessage('userId is required.'),
+    body('otp')
+      .trim()
+      .notEmpty().withMessage('OTP is required.')
+      .isLength({ min: 6, max: 6 }).withMessage('OTP must be exactly 6 digits.')
+      .isNumeric().withMessage('OTP must contain only digits.'),
+  ],
+  validate,
+  verifyOtp
+);
+>>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
 
 // ── GET /auth/me ──────────────────────────────────────────────
 router.get('/me', protect, getMe);

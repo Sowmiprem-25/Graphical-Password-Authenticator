@@ -2,8 +2,16 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const IMAGE_LIBRARY = require('../data/imageLibrary');
+<<<<<<< HEAD
 const { sendSecurityAlertEmail, sendOTPEmail } = require('../utils/email');
 const crypto = require('crypto');
+=======
+const { sendOtpEmail } = require('../services/emailService');
+
+// ── In-Memory OTP Store ───────────────────────────────────────
+// Map<userId(string), { otp, expiresAt }>
+const otpStore = new Map();
+>>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
 
 // ── Helpers ──────────────────────────────────────────────────
 const getImageById = (id) => IMAGE_LIBRARY.find((img) => img.id === id);
@@ -400,13 +408,80 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Success!
+    // ── Graphical password correct → generate & send OTP ──────
     await logAttempt(user.id, true);
     await query(
       `UPDATE users SET failed_attempt_count=0, locked_until=NULL WHERE id=$1`,
       [user.id]
     );
 
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = Date.now() + (parseInt(process.env.OTP_EXPIRES_MS) || 300000);
+    otpStore.set(String(user.id), { otp, expiresAt });
+
+    // Send OTP via email (non-blocking failure — log but don't crash)
+    try {
+      await sendOtpEmail(user.email, otp, user.name);
+    } catch (mailErr) {
+      console.error('[OTP Email Error]', mailErr.message);
+      // Clear OTP if we can't send — don't leave a dangling entry
+      otpStore.delete(String(user.id));
+      return res.status(503).json({
+        success: false,
+        message: 'Could not send OTP email. Please try again or contact support.',
+      });
+    }
+
+    return res.status(202).json({
+      success: true,
+      otpPending: true,
+      userId: user.id,
+      message: `A 6-digit verification code has been sent to ${user.email}. Enter it to complete login.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// POST /auth/verify-otp
+// Body: { userId, otp }
+// ══════════════════════════════════════════════════════════════
+const verifyOtp = async (req, res, next) => {
+  try {
+    const { userId, otp } = req.body;
+
+    if (!userId || !otp) {
+      return res.status(400).json({ success: false, message: 'userId and otp are required.' });
+    }
+
+    const record = otpStore.get(String(userId));
+
+    if (!record) {
+      return res.status(400).json({ success: false, message: 'No OTP found. Please restart the login process.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(String(userId));
+      return res.status(410).json({ success: false, message: 'OTP has expired. Please login again.' });
+    }
+
+    if (String(otp).trim() !== record.otp) {
+      return res.status(401).json({ success: false, message: 'Incorrect OTP. Please try again.' });
+    }
+
+    // OTP verified — clean it up and issue JWT
+    otpStore.delete(String(userId));
+
+    const userResult = await query(
+      `SELECT id, name, email FROM users WHERE id=$1`,
+      [userId]
+    );
+    if (!userResult.rows.length) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    const user = userResult.rows[0];
     const token = signToken(user.id);
 
     res.json({
@@ -464,6 +539,7 @@ const getMe = async (req, res, next) => {
   }
 };
 
+<<<<<<< HEAD
 // ══════════════════════════════════════════════════════════════
 // POST /auth/forgot-password
 // ══════════════════════════════════════════════════════════════
@@ -601,3 +677,6 @@ const resetPassword = async (req, res, next) => {
 };
 
 module.exports = { register, getImageOptions, login, getMe, forgotPassword, verifyResetOTP, resetPassword };
+=======
+module.exports = { register, getImageOptions, login, verifyOtp, getMe };
+>>>>>>> b97bbb32d0c8551870d3359f1936254876a71444
