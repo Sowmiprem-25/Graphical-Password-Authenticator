@@ -133,7 +133,7 @@ const handleFailedAttempt = async (userId, ip, userAgent) => {
 const register = async (req, res, next) => {
   const client = await require('../config/db').getClient();
   try {
-    const { name, email, cues, imageSequence, imageCategory = 'mixed' } = req.body;
+    const { name, email, cues, imageSequence, imageCategory = 'mixed', memoryStory } = req.body;
 
     // Validate cues array
     if (!Array.isArray(cues) || cues.length < 3 || cues.length > 5) {
@@ -187,8 +187,8 @@ const register = async (req, res, next) => {
 
     // 1. Create user
     const userResult = await client.query(
-      `INSERT INTO users (name, email, image_category) VALUES ($1, $2, $3) RETURNING id, name, email, image_category, created_at`,
-      [name.trim(), email.toLowerCase().trim(), imageCategory]
+      `INSERT INTO users (name, email, image_category, memory_story) VALUES ($1, $2, $3, $4) RETURNING id, name, email, image_category, memory_story, created_at`,
+      [name.trim(), email.toLowerCase().trim(), imageCategory, memoryStory || null]
     );
     const user = userResult.rows[0];
 
@@ -492,7 +492,7 @@ const verifyOtp = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.email, u.account_status, u.created_at,
+      `SELECT u.id, u.name, u.email, u.account_status, u.memory_story, u.created_at,
               umc.cue_value, umc.cue_order,
               uim.image_id, uim.image_order
        FROM users u
@@ -521,6 +521,7 @@ const getMe = async (req, res, next) => {
         email: row.email,
         status: row.account_status,
         createdAt: row.created_at,
+        memoryStory: row.memory_story,
         sequenceLength: cues.length,
         cueCount: cues.length,
       },

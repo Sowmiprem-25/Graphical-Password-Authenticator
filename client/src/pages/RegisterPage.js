@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import { Shield, ArrowRight, User, Mail, Grid, Check, Loader2 } from 'lucide-react';
+import { Shield, ArrowRight, User, Mail, Grid, Check, Loader2, BookOpen, Edit2, RotateCcw } from 'lucide-react';
+import { generateStory } from '../utils/storyGenerator';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -21,6 +22,9 @@ const RegisterPage = () => {
   // Step 2 State
   const [imageOptions, setImageOptions] = useState({}); // { cueIndex: [images] }
   const [selectedImages, setSelectedImages] = useState({}); // { cueIndex: imageId }
+  const [memoryStory, setMemoryStory] = useState('');
+  const [isEditingStory, setIsEditingStory] = useState(false);
+  const [manualStory, setManualStory] = useState(false);
 
   const handleCueChange = (index, value) => {
     const newCues = [...cues];
@@ -82,7 +86,26 @@ const RegisterPage = () => {
   };
 
   const handleImageSelect = (cueIndex, imageId) => {
-    setSelectedImages(prev => ({ ...prev, [cueIndex]: imageId }));
+    const updatedSelected = { ...selectedImages, [cueIndex]: imageId };
+    setSelectedImages(updatedSelected);
+
+    // If all images are selected and user hasn't manually edited, generate story
+    if (Object.keys(updatedSelected).length === cues.length && !manualStory) {
+      const names = cues.map((_, i) => {
+        const img = imageOptions[i].find(o => o.id === updatedSelected[i]);
+        return img ? img.name : '';
+      });
+      setMemoryStory(generateStory(names));
+    }
+  };
+
+  const regenerateStory = () => {
+    const names = cues.map((_, i) => {
+      const img = imageOptions[i].find(o => o.id === selectedImages[i]);
+      return img ? img.name : '';
+    });
+    setMemoryStory(generateStory(names));
+    setManualStory(false);
   };
 
   const handleFinalSubmit = async () => {
@@ -98,7 +121,8 @@ const RegisterPage = () => {
         email: formData.email,
         cues,
         imageSequence: sequence,
-        imageCategory
+        imageCategory,
+        memoryStory
       });
       
       toast.success(res.data.message);
@@ -329,6 +353,64 @@ const RegisterPage = () => {
                       );
                     })}
                   </div>
+
+                  {/* Memory Story Section */}
+                  {Object.keys(selectedImages).length === cues.length && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-secondary/5 border-2 border-secondary/20 rounded-2xl p-6 relative"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="h-5 w-5 text-secondary" />
+                          <h3 className="font-bold text-gray-800">Your Memory Story</h3>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            type="button"
+                            onClick={() => setIsEditingStory(!isEditingStory)}
+                            className="p-2 hover:bg-white rounded-lg transition-colors text-gray-500"
+                            title="Edit story"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={regenerateStory}
+                            className="p-2 hover:bg-white rounded-lg transition-colors text-gray-500"
+                            title="Regenerate story"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isEditingStory ? (
+                        <textarea
+                          className="input-field min-h-[80px] text-sm bg-white"
+                          value={memoryStory}
+                          onChange={(e) => {
+                            setMemoryStory(e.target.value);
+                            setManualStory(true);
+                          }}
+                          placeholder="Type your own memory story..."
+                        />
+                      ) : (
+                        <p className="text-gray-700 italic text-sm leading-relaxed p-2">
+                          "{memoryStory}"
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex gap-2 items-start bg-blue-50 p-3 rounded-xl border border-blue-100">
+                        <span className="text-xl">💡</span>
+                        <p className="text-xs text-blue-700 leading-relaxed">
+                          <strong>Tip:</strong> People remember stories much better than random objects. 
+                          Feel free to make it as funny or weird as you like!
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
 
                   <div className="flex gap-4 pt-6 border-t border-gray-100">
                     <button 

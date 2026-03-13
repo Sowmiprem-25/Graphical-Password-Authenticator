@@ -90,10 +90,6 @@ const DashboardPage = () => {
                   <p className="font-semibold text-gray-900 break-all">{user?.email}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Cues Configured</p>
-                  <p className="font-semibold text-gray-900">{user?.cueCount} anchors</p>
-                </div>
-                <div>
                   <p className="text-sm text-gray-500 mb-1">Joined</p>
                   <div className="flex items-center gap-2 text-gray-900 font-semibold">
                     <Calendar className="h-4 w-4 text-gray-500" />
@@ -102,6 +98,30 @@ const DashboardPage = () => {
                 </div>
               </div>
             </div>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="card bg-white shadow-lg md:col-span-3"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <ShieldCheck className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">Memory Story</h3>
+            </div>
+            {user?.memoryStory ? (
+              <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100 italic text-gray-700 text-sm leading-relaxed">
+                "{user.memoryStory}"
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No memory story configured.</p>
+            )}
+            <p className="text-[10px] text-gray-400 mt-4 leading-tight">
+              This is a private memory aid. It is never shown during login.
+            </p>
           </motion.div>
         </div>
 

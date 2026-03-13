@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
                         CHECK (account_status IN ('active', 'locked', 'suspended')),
   image_category      VARCHAR(50) NOT NULL DEFAULT 'mixed'
                         CHECK (image_category IN ('mixed', 'animals', 'food', 'vehicles', 'nature', 'objects', 'technology', 'symbols', 'tools')),
+  memory_story        TEXT,
   failed_attempt_count INTEGER NOT NULL DEFAULT 0,
   locked_until        TIMESTAMP WITH TIME ZONE,
   reset_otp           VARCHAR(6),
@@ -143,3 +144,8 @@ DROP TRIGGER IF EXISTS auth_seq_updated_at ON auth_sequences;
 CREATE TRIGGER auth_seq_updated_at
   BEFORE UPDATE ON auth_sequences
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+ 
+ -- ============================================================
+ -- Ensure memory_story column exists for existing users table
+ -- ============================================================
+ ALTER TABLE users ADD COLUMN IF NOT EXISTS memory_story TEXT;
