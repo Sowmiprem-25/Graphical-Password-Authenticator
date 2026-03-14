@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -344,6 +344,11 @@ const LoginPage = () => {
                       : <>Continue to Password Grid <ArrowRight className="h-5 w-5 ml-2 inline" /></>
                     }
                   </button>
+                  <div className="text-center">
+                    <Link to="/forgot-password" size="sm" className="text-sm font-semibold text-gray-400 hover:text-primary transition-colors">
+                      Forgot your graphical sequence?
+                    </Link>
+                  </div>
                 </motion.form>
               )}
 
@@ -460,20 +465,26 @@ const LoginPage = () => {
                                 <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
                               </motion.div>
                             ) : (
-                              /* ── UNSELECTED STATE: show emoji + label ── */
-                              <motion.div
-                                key="image"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="flex flex-col items-center justify-center"
-                              >
-                                <span className="text-3xl drop-shadow-sm">{img.emoji}</span>
-                                <span className="text-[10px] font-semibold text-gray-500 mt-1 uppercase tracking-wider hidden sm:block">
-                                  {img.name}
-                                </span>
-                              </motion.div>
+                                /* ── UNSELECTED STATE: show emoji + label with dynamic distortion ── */
+                                <motion.div
+                                  key="image"
+                                  initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+                                  animate={{ 
+                                    opacity: 1, 
+                                    scale: 0.9 + Math.random() * 0.2, // Random scale 0.9 to 1.1
+                                    rotate: (Math.random() - 0.5) * 15, // Random rotation -7.5deg to 7.5deg
+                                    x: (Math.random() - 0.5) * 4, // Random x shift
+                                    y: (Math.random() - 0.5) * 4  // Random y shift
+                                  }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                                  className="flex flex-col items-center justify-center pointer-events-none"
+                                >
+                                  <span className="text-3xl drop-shadow-sm select-none">{img.emoji}</span>
+                                  <span className="text-[10px] font-semibold text-gray-500 mt-1 uppercase tracking-wider hidden sm:block">
+                                    {img.name}
+                                  </span>
+                                </motion.div>
                             )}
                           </AnimatePresence>
                         </motion.div>

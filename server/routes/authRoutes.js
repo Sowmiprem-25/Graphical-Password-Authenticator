@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { register, getImageOptions, login, verifyOtp, getMe } = require('../controllers/authController');
+const { register, getImageOptions, login, getMe, forgotPassword, verifyOtp, resetPassword } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { authRateLimiter } = require('../middleware/rateLimiter');
 const validate = require('../middleware/validate');
@@ -60,20 +60,10 @@ router.post(
   login
 );
 
-// ── POST /auth/verify-otp ──────────────────────────────────
-router.post(
-  '/verify-otp',
-  [
-    body('userId').notEmpty().withMessage('userId is required.'),
-    body('otp')
-      .trim()
-      .notEmpty().withMessage('OTP is required.')
-      .isLength({ min: 6, max: 6 }).withMessage('OTP must be exactly 6 digits.')
-      .isNumeric().withMessage('OTP must contain only digits.'),
-  ],
-  validate,
-  verifyOtp
-);
+// ── Forgot Password ──────────────────────────────────────────
+router.post('/forgot-password', authRateLimiter, forgotPassword);
+router.post('/verify-otp', authRateLimiter, verifyOtp);
+router.post('/reset-password', authRateLimiter, resetPassword);
 
 // ── GET /auth/me ──────────────────────────────────────────────
 router.get('/me', protect, getMe);

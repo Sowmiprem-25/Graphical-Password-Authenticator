@@ -1,4 +1,14 @@
 const { query } = require('../config/db');
+const geoip = require('geoip-lite');
+
+const getLocation = (ip) => {
+  if (!ip) return 'Unknown';
+  if (ip === '::1' || ip === '127.0.0.1') return 'Localhost';
+  const geo = geoip.lookup(ip);
+  if (geo && geo.city && geo.country) return `${geo.city}, ${geo.country}`;
+  if (geo && geo.country) return geo.country;
+  return 'Unknown';
+};
 
 // ══════════════════════════════════════════════════════════════
 // GET /admin/logs — Recent login attempts
@@ -26,7 +36,10 @@ const getLogs = async (req, res, next) => {
       total: parseInt(countResult.rows[0].count),
       limit,
       offset,
-      logs: result.rows,
+      logs: result.rows.map(log => ({
+        ...log,
+        location: getLocation(log.ip_address)
+      })),
     });
   } catch (err) {
     next(err);
@@ -61,7 +74,10 @@ const getAlerts = async (req, res, next) => {
     res.json({
       success: true,
       total: parseInt(countResult.rows[0].count),
-      alerts: result.rows,
+      alerts: result.rows.map(alert => ({
+        ...alert,
+        location: getLocation(alert.ip_address)
+      })),
     });
   } catch (err) {
     next(err);
