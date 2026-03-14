@@ -49,6 +49,8 @@ const LoginPage = () => {
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     if (!email) return toast.error('Email is required');
+    // Block submission entirely if already known-locked
+    if (isLocked) return;
 
     setLoading(true);
     try {
@@ -62,17 +64,13 @@ const LoginPage = () => {
       setPhase(2);
     } catch (err) {
       if (err.response?.status === 423) {
-        // Account is locked — show the lock message clearly and move to phase 2
-        // so the user sees the full lock banner with the frozen grid.
-        const msg = err.response?.data?.message || 'Your account has been locked due to too many failed attempts.';
-        toast.error(`🔒 ${msg}`, { duration: 6000 });
-        // Move to phase 2 with locked state so the lock banner is visible
+        // Account is locked — stay on Phase 1, NEVER show the image grid
+        const msg =
+          err.response?.data?.message ||
+          'Your account has been locked due to too many failed attempts.';
         setIsLocked(true);
         setLockMessage(msg);
-        // Use an empty grid if none loaded yet; show lock banner on top
-        if (gridData.length === 0) setGridData([]);
-        setSequenceLength(0);
-        setPhase(2);
+        // Do NOT call setPhase(2) — user stays here and cannot reach the grid
       } else {
         toast.error(err.response?.data?.message || 'Login failed. Please verify your email.');
       }
@@ -124,8 +122,12 @@ const LoginPage = () => {
       setSelectedSequence([]);
 
       if (err.response?.status === 423) {
+        // Account is now locked — remove the grid entirely by going back to Phase 1
         setIsLocked(true);
         setLockMessage(msg);
+        setGridData([]);          // wipe any cached grid data
+        setSequenceLength(0);
+        setPhase(1);              // ← back to email form; grid is unmounted
       } else {
         await fetchNewGrid(email);
       }
@@ -288,6 +290,30 @@ const LoginPage = () => {
                   onSubmit={handleEmailSubmit}
                   className="space-y-6"
                 >
+                  {/* 🔒 Account locked banner — shown on Phase 1 when locked */}
+                  {isLocked && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-red-50 border border-red-300 rounded-xl px-4 py-4 flex items-start gap-3"
+                    >
+                      <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-red-700">🔒 Account Locked</p>
+                        <p className="text-xs text-red-500 mt-1 leading-relaxed">
+                          {lockMessage || 'Too many failed attempts. Please contact support or try again later.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setIsLocked(false); setLockMessage(''); setEmail(''); }}
+                          className="mt-2 text-xs font-semibold text-red-600 underline hover:text-red-800"
+                        >
+                          Try a different account
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email Address
@@ -295,19 +321,26 @@ const LoginPage = () => {
                     <input
                       type="email"
                       required
-                      className="input-field"
+                      className={`input-field ${
+                        isLocked ? 'opacity-60 cursor-not-allowed bg-gray-50' : ''
+                      }`}
                       placeholder="Enter your registered email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => { if (!isLocked) setEmail(e.target.value); }}
+                      readOnly={isLocked}
                     />
                   </div>
                   <button
                     type="submit"
-                    className="btn-primary w-full py-4 text-lg"
-                    disabled={loading}
+                    className={`btn-primary w-full py-4 text-lg ${
+                      isLocked ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    disabled={loading || isLocked}
                   >
                     {loading
                       ? <Loader2 className="animate-spin h-5 w-5" />
+                      : isLocked
+                      ? <><AlertTriangle className="h-5 w-5 mr-2 inline" />Account Locked</>
                       : <>Continue to Password Grid <ArrowRight className="h-5 w-5 ml-2 inline" /></>
                     }
                   </button>
